@@ -3,10 +3,22 @@ export const prerender = false;
 
 import { sql } from "kysely";
 
-// ── Auth check ──
+// ── Auth check: must be logged in with admin role ──
 const user = (Astro.locals as any).user;
 if (!user) {
 	return Astro.redirect("/_emdash/admin");
+}
+if (user.role !== "admin") {
+	return new Response("Forbidden: admin role required", { status: 403 });
+}
+
+// ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
+if (Astro.request.method === "POST") {
+	const origin = Astro.request.headers.get("Origin");
+	const expectedOrigin = Astro.url.origin;
+	if (origin && origin !== expectedOrigin) {
+		return new Response("Forbidden: CSRF check failed", { status: 403 });
+	}
 }
 
 const emdash = (Astro.locals as any).emdash;
