@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { sql } from "kysely";
+import { generateSnapshot } from "emdash-snapshot";
 
 // ── Auth check: must be logged in with admin role ──
 const user = (Astro.locals as any).user;
@@ -25,113 +25,6 @@ const emdash = (Astro.locals as any).emdash;
 const db = emdash?.db;
 const storage = emdash?.storage;
 
-// ── Snapshot logic (from emdash core) ──
-
-const SAFE_TABLE_NAME = /^[a-z_][a-z0-9_]*$/;
-
-const SYSTEM_TABLES = [
-	"_emdash_collections", "_emdash_fields", "_emdash_taxonomy_defs",
-	"_emdash_menus", "_emdash_menu_items", "_emdash_sections",
-	"_emdash_widget_areas", "_emdash_widgets", "_emdash_seo",
-	"_emdash_migrations", "_emdash_bylines", "_emdash_content_bylines",
-	"taxonomies", "content_taxonomies", "media", "options", "revisions",
-];
-
-const EXCLUDED_PREFIXES = [
-	"_emdash_api_tokens", "_emdash_oauth_tokens", "_emdash_authorization_codes",
-	"_emdash_device_codes", "_emdash_migrations_lock", "_plugin_",
-	"users", "sessions", "credentials", "challenges",
-];
-
-const SAFE_OPTIONS_PREFIXES = ["site:"];
-
-function isExcluded(name: string) {
-	return EXCLUDED_PREFIXES.some((p) => name.startsWith(p));
-}
-
-function injectSrc(obj: any, origin: string): boolean {
-	let modified = false;
-	if ((obj.provider === "local" || (!obj.provider && obj.id && obj.meta)) && !obj.src) {
-		const key = obj.meta?.storageKey ?? obj.id;
-		if (typeof key === "string" && key) {
-			obj.src = `${origin}/_emdash/api/media/file/${key}`;
-			modified = true;
-		}
-	}
-	for (const value of Object.values(obj)) {
-		if (Array.isArray(value)) {
-			for (const item of value as any[]) {
-				if (typeof item === "object" && item && !Array.isArray(item)) {
-					if (injectSrc(item, origin)) modified = true;
-				}
-			}
-		} else if (typeof value === "object" && value && !Array.isArray(value)) {
-			if (injectSrc(value as any, origin)) modified = true;
-		}
-	}
-	return modified;
-}
-
-async function generateSnapshot(db: any, origin: string) {
-	const tableResult = await sql`
-		SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'ec_%' ORDER BY name
-	`.execute(db);
-
-	const contentTables = (tableResult.rows as any[]).map((r: any) => r.name);
-	const allTables = [...contentTables, ...SYSTEM_TABLES];
-	const tables: Record<string, any[]> = {};
-	const schema: Record<string, any> = {};
-
-	for (const tableName of allTables) {
-		if (isExcluded(tableName) || !SAFE_TABLE_NAME.test(tableName)) continue;
-
-		try {
-			const pragma = await sql`PRAGMA table_info(${sql.raw(`"${tableName}"`)})`.execute(db);
-			const cols = pragma.rows as any[];
-			if (cols.length === 0) continue;
-
-			schema[tableName] = {
-				columns: cols.map((r: any) => r.name),
-				types: Object.fromEntries(cols.map((r: any) => [r.name, r.type || "TEXT"])),
-			};
-
-			let rows: any[];
-			if (tableName.startsWith("ec_")) {
-				rows = (await sql`
-					SELECT * FROM ${sql.raw(`"${tableName}"`)}
-					WHERE deleted_at IS NULL
-					AND (status = 'published' OR (status = 'scheduled' AND scheduled_at <= datetime('now')))
-				`.execute(db)).rows as any[];
-			} else if (tableName === "options") {
-				rows = ((await sql`SELECT * FROM ${sql.raw(`"${tableName}"`)}`.execute(db)).rows as any[])
-					.filter((r: any) => SAFE_OPTIONS_PREFIXES.some((p) => (r.name || "").startsWith(p)));
-			} else {
-				rows = (await sql`SELECT * FROM ${sql.raw(`"${tableName}"`)}`.execute(db)).rows as any[];
-			}
-
-			if (rows.length > 0) tables[tableName] = rows;
-		} catch { /* table may not exist */ }
-	}
-
-	// Inject media URLs
-	for (const [tName, tRows] of Object.entries(tables)) {
-		if (!tName.startsWith("ec_")) continue;
-		for (const row of tRows) {
-			for (const [col, val] of Object.entries(row)) {
-				if (typeof val !== "string" || !val.startsWith("{")) continue;
-				try {
-					const obj = JSON.parse(val);
-					if (typeof obj === "object" && obj && !Array.isArray(obj) && injectSrc(obj, origin)) {
-						row[col] = JSON.stringify(obj);
-					}
-				} catch {}
-			}
-		}
-	}
-
-	return { tables, schema, generatedAt: new Date().toISOString() };
-}
-
 // ── Handle POST (do the export) ──
 
 const R2_KEY = "exports/site-export.json";
@@ -139,7 +32,7 @@ let result: { success: boolean; size?: number; error?: string } | null = null;
 
 if (Astro.request.method === "POST" && db && storage) {
 	try {
-		const snapshot = await generateSnapshot(db, Astro.url.origin);
+		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
 		const json = JSON.stringify(snapshot);
 		const body = new TextEncoder().encode(json);
 
