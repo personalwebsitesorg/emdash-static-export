@@ -1,0 +1,22 @@
+{
+  "name": "emdash-static-export",
+  "version": "1.0.0",
+  "description": "One-click export of emdash site data to R2. Adds /_emdash/export page with a button.",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src"],
+  "keywords": ["emdash", "cms", "static", "export", "r2", "cloudflare", "astro"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/personalwebsitesorg/emdash-static-export"
+  },
+  "peerDependencies": {
+    "astro": ">=6.0.0",
+    "emdash": ">=0.0.3",
+    "kysely": ">=0.27.0"
+  }
+}
