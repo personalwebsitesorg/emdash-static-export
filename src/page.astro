@@ -10,6 +10,11 @@ if (user.role < 50) {
 	return new Response(`Forbidden: admin role required. Current role: ${JSON.stringify(user.role)}`, { status: 403 });
 }
 
+// security headers
+Astro.response.headers.set("X-Frame-Options", "DENY");
+Astro.response.headers.set("X-Content-Type-Options", "nosniff");
+Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+
 // ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
 if (Astro.request.method === "POST") {
 	const expectedOrigin = Astro.url.origin;
