@@ -9,7 +9,7 @@ if (!user) {
 	return Astro.redirect("/_emdash/admin");
 }
 if (user.role < 50) {
-	return new Response("Forbidden: admin role required", { status: 403 });
+	return new Response(`Forbidden: admin role required. Current role: ${JSON.stringify(user.role)}`, { status: 403 });
 }
 
 // ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
