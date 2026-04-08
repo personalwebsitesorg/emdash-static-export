@@ -15,27 +15,23 @@ Astro.response.headers.set("X-Frame-Options", "DENY");
 Astro.response.headers.set("X-Content-Type-Options", "nosniff");
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 
-// ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
+// ── CSRF check: POST must include valid origin ──
 if (Astro.request.method === "POST") {
 	const expectedOrigin = Astro.url.origin;
-	const hasCustomHeader = Astro.request.headers.has("X-EmDash-Request");
+	const origin = Astro.request.headers.get("Origin");
+	const referer = Astro.request.headers.get("Referer");
+	let sourceOrigin: string | null = origin;
 
-	if (!hasCustomHeader) {
-		const origin = Astro.request.headers.get("Origin");
-		const referer = Astro.request.headers.get("Referer");
-		let sourceOrigin: string | null = origin;
-
-		if (!sourceOrigin && referer) {
-			try {
-				sourceOrigin = new URL(referer).origin;
-			} catch (e) {
-				// ignore invalid referer URL
-			}
+	if (!sourceOrigin && referer) {
+		try {
+			sourceOrigin = new URL(referer).origin;
+		} catch (e) {
+			// ignore invalid referer URL
 		}
+	}
 
-		if (!sourceOrigin || sourceOrigin !== expectedOrigin) {
-			return new Response("Forbidden: CSRF check failed", { status: 403 });
-		}
+	if (!sourceOrigin || sourceOrigin !== expectedOrigin) {
+		return new Response("Forbidden: CSRF check failed", { status: 403 });
 	}
 }
 
