@@ -46,23 +46,25 @@ const R2_KEY = "exports/site-export.json";
 let result: { success: boolean; size?: number; error?: string } | null = null;
 
 // Tables not needed by the frontend — filter out before uploading to R2
-const REMOVE_TABLES = new Set([
+const REMOVE_TABLES = [
 	"revisions",
 	"_emdash_migrations",
 	"_emdash_collections",
 	"_emdash_fields",
 	"_emdash_taxonomy_defs",
 	"_emdash_sections",
-]);
+];
 
 if (Astro.request.method === "POST" && db && storage) {
 	try {
 		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
 
 		// modify snapshot in-place
+		// assign undefined instead of using 'delete' to avoid V8 degrading the object
+		// JSON.stringify will skip those values anyway
 		for (const table of REMOVE_TABLES) {
-			delete snapshot.tables[table];
-			delete snapshot.schema[table];
+			snapshot.tables[table] = undefined;
+			snapshot.schema[table] = undefined;
 		}
 
 		const json = JSON.stringify(snapshot);
