@@ -1,8 +1,6 @@
 ---
 export const prerender = false;
 
-import { generateSnapshot } from "emdash-snapshot";
-
 // ── Auth check: must be logged in with admin role ──
 const user = (Astro.locals as any).user;
 if (!user) {
@@ -12,11 +10,27 @@ if (user.role < 50) {
 	return new Response(`Forbidden: admin role required. Current role: ${JSON.stringify(user.role)}`, { status: 403 });
 }
 
-// ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
+// security headers
+Astro.response.headers.set("X-Frame-Options", "DENY");
+Astro.response.headers.set("X-Content-Type-Options", "nosniff");
+Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+
+// ── CSRF check: POST must include valid origin ──
 if (Astro.request.method === "POST") {
-	const origin = Astro.request.headers.get("Origin");
 	const expectedOrigin = Astro.url.origin;
-	if (origin && origin !== expectedOrigin) {
+	const origin = Astro.request.headers.get("Origin");
+	const referer = Astro.request.headers.get("Referer");
+	let sourceOrigin: string | null = origin;
+
+	if (!sourceOrigin && referer) {
+		try {
+			sourceOrigin = new URL(referer).origin;
+		} catch (e) {
+			// ignore invalid referer URL
+		}
+	}
+
+	if (!sourceOrigin || sourceOrigin !== expectedOrigin) {
 		return new Response("Forbidden: CSRF check failed", { status: 403 });
 	}
 }
@@ -31,30 +45,30 @@ const R2_KEY = "exports/site-export.json";
 let result: { success: boolean; size?: number; error?: string } | null = null;
 
 // Tables not needed by the frontend — filter out before uploading to R2
-const REMOVE_TABLES = new Set([
+const REMOVE_TABLES = [
 	"revisions",
 	"_emdash_migrations",
 	"_emdash_collections",
 	"_emdash_fields",
 	"_emdash_taxonomy_defs",
 	"_emdash_sections",
-]);
+];
 
 if (Astro.request.method === "POST" && db && storage) {
 	try {
+		// lazily import generateSnapshot only on POST
+		const { generateSnapshot } = await import("emdash-snapshot");
 		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
 
-		const filtered = {
-			...snapshot,
-			tables: Object.fromEntries(
-				Object.entries(snapshot.tables).filter(([name]) => !REMOVE_TABLES.has(name)),
-			),
-			schema: Object.fromEntries(
-				Object.entries(snapshot.schema).filter(([name]) => !REMOVE_TABLES.has(name)),
-			),
-		};
+		// modify snapshot in-place
+		// assign undefined instead of using 'delete' to avoid V8 degrading the object
+		// JSON.stringify will skip those values anyway
+		for (const table of REMOVE_TABLES) {
+			snapshot.tables[table] = undefined;
+			snapshot.schema[table] = undefined;
+		}
 
-		const json = JSON.stringify(filtered);
+		const json = JSON.stringify(snapshot);
 		const body = new TextEncoder().encode(json);
 
 		await storage.upload({
