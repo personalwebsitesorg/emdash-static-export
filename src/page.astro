@@ -1,8 +1,6 @@
 ---
 export const prerender = false;
 
-import { generateSnapshot } from "emdash-snapshot";
-
 // ── Auth check: must be logged in with admin role ──
 const user = (Astro.locals as any).user;
 if (!user) {
@@ -57,6 +55,8 @@ const REMOVE_TABLES = [
 
 if (Astro.request.method === "POST" && db && storage) {
 	try {
+		// lazily import generateSnapshot only on POST
+		const { generateSnapshot } = await import("emdash-snapshot");
 		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
 
 		// modify snapshot in-place
