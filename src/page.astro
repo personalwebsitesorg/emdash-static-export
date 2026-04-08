@@ -30,10 +30,31 @@ const storage = emdash?.storage;
 const R2_KEY = "exports/site-export.json";
 let result: { success: boolean; size?: number; error?: string } | null = null;
 
+// Tables not needed by the frontend — filter out before uploading to R2
+const REMOVE_TABLES = new Set([
+	"revisions",
+	"_emdash_migrations",
+	"_emdash_collections",
+	"_emdash_fields",
+	"_emdash_taxonomy_defs",
+	"_emdash_sections",
+]);
+
 if (Astro.request.method === "POST" && db && storage) {
 	try {
 		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
-		const json = JSON.stringify(snapshot);
+
+		const filtered = {
+			...snapshot,
+			tables: Object.fromEntries(
+				Object.entries(snapshot.tables).filter(([name]) => !REMOVE_TABLES.has(name)),
+			),
+			schema: Object.fromEntries(
+				Object.entries(snapshot.schema).filter(([name]) => !REMOVE_TABLES.has(name)),
+			),
+		};
+
+		const json = JSON.stringify(filtered);
 		const body = new TextEncoder().encode(json);
 
 		await storage.upload({

@@ -43,5 +43,22 @@ The full site snapshot to R2 at `exports/site-export.json`:
 1. Astro integration injects a page at `/_emdash/export`
 2. Page checks admin auth via `locals.user`
 3. On button click, runs `generateSnapshot()` logic against D1
-4. Uploads JSON to R2 via `emdash.storage.upload()`
-5. No plugins, no sandbox, no API tokens needed
+4. Filters out tables not needed by the frontend (revisions, migrations, CMS internals)
+5. Uploads JSON to R2 via `emdash.storage.upload()`
+6. No plugins, no sandbox, no API tokens needed
+
+## Vite alias: `emdash-snapshot`
+
+This integration imports `generateSnapshot` from emdash's internal source via a Vite alias:
+
+```
+emdash-snapshot → {emdash-root}/src/api/handlers/snapshot.ts
+```
+
+This works because emdash currently ships `src/` in its npm package. **If you upgrade emdash, verify that:**
+
+- `src/api/handlers/snapshot.ts` still exists at that path
+- The `generateSnapshot` function signature hasn't changed
+- emdash still includes `src/` in the published package
+
+Long-term, this should be replaced with a public export from emdash (e.g. `import { generateSnapshot } from "emdash"`).
