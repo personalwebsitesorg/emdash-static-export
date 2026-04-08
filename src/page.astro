@@ -44,17 +44,13 @@ if (Astro.request.method === "POST" && db && storage) {
 	try {
 		const snapshot = await generateSnapshot(db, { origin: Astro.url.origin });
 
-		const filtered = {
-			...snapshot,
-			tables: Object.fromEntries(
-				Object.entries(snapshot.tables).filter(([name]) => !REMOVE_TABLES.has(name)),
-			),
-			schema: Object.fromEntries(
-				Object.entries(snapshot.schema).filter(([name]) => !REMOVE_TABLES.has(name)),
-			),
-		};
+		// modify snapshot in-place
+		for (const table of REMOVE_TABLES) {
+			delete snapshot.tables[table];
+			delete snapshot.schema[table];
+		}
 
-		const json = JSON.stringify(filtered);
+		const json = JSON.stringify(snapshot);
 		const body = new TextEncoder().encode(json);
 
 		await storage.upload({
