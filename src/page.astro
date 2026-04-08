@@ -14,10 +14,25 @@ if (user.role < 50) {
 
 // ── CSRF check: POST must include X-EmDash-Request header or valid origin ──
 if (Astro.request.method === "POST") {
-	const origin = Astro.request.headers.get("Origin");
 	const expectedOrigin = Astro.url.origin;
-	if (origin && origin !== expectedOrigin) {
-		return new Response("Forbidden: CSRF check failed", { status: 403 });
+	const hasCustomHeader = Astro.request.headers.has("X-EmDash-Request");
+
+	if (!hasCustomHeader) {
+		const origin = Astro.request.headers.get("Origin");
+		const referer = Astro.request.headers.get("Referer");
+		let sourceOrigin: string | null = origin;
+
+		if (!sourceOrigin && referer) {
+			try {
+				sourceOrigin = new URL(referer).origin;
+			} catch (e) {
+				// ignore invalid referer URL
+			}
+		}
+
+		if (!sourceOrigin || sourceOrigin !== expectedOrigin) {
+			return new Response("Forbidden: CSRF check failed", { status: 403 });
+		}
 	}
 }
 
